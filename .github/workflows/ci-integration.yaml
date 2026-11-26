@@ -1,0 +1,84 @@
+name: 🧪 Integration
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  integration:
+    name: 🐳 Integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      IT_TARGET_ENGINE: docker
+      IT_TARGET_NAME: astrarium-it
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: "3.13"
+
+      - name: Install sops and age
+        env:
+          SOPS_VERSION: v3.13.3
+          SOPS_SHA256: e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b
+          AGE_VERSION: v1.3.2
+          AGE_SHA256: cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10
+        run: |
+          set -euo pipefail
+          bin="$RUNNER_TEMP/tools/bin"
+          mkdir -p "$bin"
+          cd "$RUNNER_TEMP/tools"
+          curl -fsSLo sops "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
+          echo "${SOPS_SHA256}  sops" | sha256sum -c -
+          curl -fsSLo age.tar.gz "https://github.com/FiloSottile/age/releases/download/$AGE_VERSION/age-$AGE_VERSION-linux-amd64.tar.gz"
+          echo "${AGE_SHA256}  age.tar.gz" | sha256sum -c -
+          tar -xzf age.tar.gz
+          install -m 0755 sops age/age age/age-keygen "$bin/"
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Load tcp_bbr on runner kernel
+        run: |
+          set -euo pipefail
+          grep -qw bbr /proc/sys/net/ipv4/tcp_available_congestion_control || sudo modprobe tcp_bbr
+          grep -qw bbr /proc/sys/net/ipv4/tcp_available_congestion_control
+
+      - name: Start disposable target
+        run: eval "$(bash tests/integration/target/it-target.sh start)" >> "$GITHUB_ENV"
+
+      - name: Pre-install pinned xray into target
+        run: |
+          set -euo pipefail
+          tag=$(git ls-remote --tags https://github.com/XTLS/Xray-core.git 'refs/tags/v*' \
+            | grep -v '\^{}' | awk '{print $2}' | sed 's|refs/tags/||' | sort -V | tail -n 1)
+          echo "prestaging xray $tag into $IT_TARGET_NAME"
+          docker exec "$IT_TARGET_NAME" sh -c \
+            'curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh -o /tmp/install-release.sh \
+             && bash /tmp/install-release.sh install --version "$1"' sh "$tag"
+
+      - name: Run integration tests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ASTRARIUM_REAL_SOPS: required
+        run: uv run --locked poe tests:integration
+
+      - name: Stop target
+        if: always()
+        run: bash tests/integration/target/it-target.sh stop || true

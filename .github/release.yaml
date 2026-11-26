@@ -1,0 +1,67 @@
+changelog:
+  exclude:
+    labels:
+      - duplicate
+      - invalid
+      - wontfix
+      - skip-changelog
+    authors:
+      - dependabot
+      - dependabot[bot]
+      - github-actions[bot]
+      - renovate[bot]
+
+  categories:
+    - title: 💥 Breaking Changes
+      labels:
+        - breaking-change
+    - title: ✨ Features & Enhancements
+      labels:
+        - feature
+        - enhancement
+    - title: 🐛 Bug Fixes
+      labels:
+        - bug
+    - title: 🏗️ Core & Architecture
+      labels:
+        - core
+        - refactor
+    - title: ⚙️ CLI & Commands
+      labels:
+        - cli
+    - title: 🚀 Deployment & Rollout
+      labels:
+        - rollout
+    - title: 🔐 Secrets & Keys
+      labels:
+        - secrets
+        - keys
+    - title: 🧭 Manifest & Topology
+      labels:
+        - manifest
+        - topology
+    - title: 🔍 Checks & Status
+      labels:
+        - doctor
+        - check
+        - status
+        - versions
+        - inventory
+    - title: 📝 Templates
+      labels:
+        - templates
+    - title: 🔧 CI
+      labels:
+        - ci-cd
+    - title: 📚 Documentation
+      labels:
+        - docs
+    - title: 📦 Dependencies
+      labels:
+        - dependencies
+    - title: 🧪 Testing
+      labels:
+        - tests
+    - title: 📝 Other
+      labels:
+        - "*"
