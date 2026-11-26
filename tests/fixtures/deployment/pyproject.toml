@@ -1,0 +1,19 @@
+[project]
+name = "deployment-fixture"
+version = "0"
+requires-python = ">=3.13"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3.15",
+]
+dependencies = [ "astrarium==0.1", "hexrift==0.13.1", "nullforge==0.3.1" ]
+
+[tool.uv]
+sources.astrarium = { index = "photon" }
+sources.hexrift = { index = "photon" }
+sources.manticora = { index = "photon" }
+sources.nullforge = { index = "photon" }
+index = [ { name = "photon", url = "https://photon.example.invalid/simple/", explicit = true } ]
+package = false
