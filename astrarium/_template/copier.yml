@@ -1,0 +1,65 @@
+_min_copier_version: "9.4.0"
+_subdirectory: template
+_answers_file: .copier-answers.yml
+
+deployment_name:
+  type: str
+  help: Deployment name (lowercase letters, digits, dashes), used in run ids and notifications
+  validator: >-
+    {% if not (deployment_name | regex_search('^[a-z0-9-]+$')) %}use lowercase letters, digits and dashes{% endif %}
+
+domain:
+  type: str
+  help: Fleet domain; node names live under it (nlA00.aphelion.<domain>)
+  validator: >-
+    {% if not (domain | regex_search('^[a-z0-9]([a-z0-9-]*[a-z0-9])?([.][a-z0-9]([a-z0-9-]*[a-z0-9])?)+$')) %}enter a lowercase DNS name such as example.net{% endif %}
+
+jump:
+  type: str
+  default: ""
+  help: Node id of SSH jump host (bastion); empty for none
+  validator: >-
+    {% if jump and not (jump | regex_search('^[A-Za-z][A-Za-z0-9-]*$')) %}node ids start with a letter and hold letters, digits and dashes{% endif %}
+
+photon_url:
+  type: str
+  help: Photon index URL without credentials, e.g. https://photon.example.net/simple/
+  validator: >-
+    {% if not (photon_url | regex_search('^https://[^/@]+(/|$)')) %}use an https:// index URL without credentials (uv reads them from UV_INDEX_PHOTON_USERNAME and UV_INDEX_PHOTON_PASSWORD){% endif %}
+
+age_recipients:
+  type: str
+  multiline: true
+  help: sops recipients, one per line (age1... or ssh-ed25519 ...); include CI key and offline backup key
+  validator: |-
+    {%- set lines = age_recipients.splitlines() | map('trim') | reject('equalto', '') | list -%}
+    {%- if not lines -%}at least one recipient is required{%- endif -%}
+    {%- for line in lines if not (line | regex_search('^age1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{58}$') or line | regex_search('^ssh-ed25519 [A-Za-z0-9+/]+={0,2}( [^\\s,][^\\n,]*)?$')) -%}each recipient must be age1... public key or ssh-ed25519 public key line without commas {% endfor -%}
+
+has_dns:
+  type: bool
+  default: false
+  help: Manage DNS zones with Manticora under dns/
+
+manticora_version:
+  type: str
+  default: ""
+  when: "{{ has_dns }}"
+  help: Manticora release to pin (==)
+  validator: >-
+    {% if has_dns and not (manticora_version | regex_search('^[0-9]+[.][0-9]+[.][0-9]+')) %}enter a Manticora release such as 1.0.0{% endif %}
+
+astrarium_version:
+  type: str
+  default: ""
+  when: false
+
+hexrift_version:
+  type: str
+  default: ""
+  when: false
+
+nullforge_version:
+  type: str
+  default: ""
+  when: false
