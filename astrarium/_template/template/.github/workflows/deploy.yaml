@@ -1,0 +1,392 @@
+name: Astrarium deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - astrarium.yaml
+      - topology.yaml
+      - pyproject.toml
+      - uv.lock
+      - secrets/**
+      - .sops.yaml
+      - runes/**
+  workflow_dispatch:
+    inputs:
+      action:
+        description: deploy (configs), provision (NullForge cast) or versions-apply (catch-up NullForge pins)
+        type: choice
+        options:
+          - deploy
+          - provision
+          - versions-apply
+        default: deploy
+      limit:
+        description: Node ids, regions and @roles, comma-separated (blank = all)
+        type: string
+        default: ""
+      canary:
+        description: Node deployed first and alone
+        type: string
+        default: ""
+      force:
+        description: Roll out even when live files and binary match
+        type: boolean
+        default: false
+      dry_run:
+        description: Plan only, change nothing
+        type: boolean
+        default: false
+      runes:
+        description: Runes for provision, comma-separated (blank = full provision)
+        type: string
+        default: ""
+      since:
+        description: Base ref for versions-apply catch-up (blank = head of last run on this branch).
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astrarium-deploy
+  cancel-in-progress: false
+
+env:
+  UV_FROZEN: "1"
+  UV_INDEX_PHOTON_USERNAME: __token__
+  SOPS_VERSION: v3.13.3
+  SOPS_SHA256: e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b
+
+jobs:
+  plan:
+    name: Plan xray builds
+    if: vars.ASTRARIUM_DEPLOY == 'enabled' && (github.event_name == 'push' || inputs.action == 'deploy')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.builds.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+      - name: Install tool stack
+        env:
+          UV_INDEX_PHOTON_PASSWORD: ${{ secrets.PHOTON_READ_TOKEN }}
+        run: uv sync --frozen
+      - name: List xray builds
+        id: builds
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          matrix=$(uv run arium ci xray-builds --for deploy --json)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  build-xray:
+    name: Build xray ${{ matrix.arch }}
+    needs: plan
+    if: vars.ASTRARIUM_DEPLOY == 'enabled' && needs.plan.outputs.matrix != '[]'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - name: Restore cached build
+        id: cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: xray-out
+          key: xray-${{ matrix.sha }}-${{ matrix.arch }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          repository: XTLS/Xray-core
+          ref: ${{ matrix.sha }}
+          path: xray-core
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          go-version-file: xray-core/go.mod
+          cache-dependency-path: xray-core/go.sum
+      - name: Build xray at pinned commit
+        if: steps.cache.outputs.cache-hit != 'true'
+        working-directory: xray-core
+        env:
+          SHA: ${{ matrix.sha }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SHA"
+          mkdir -p ../xray-out
+          CGO_ENABLED=0 GOOS=linux go build -o ../xray-out/xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags "-s -w -buildid=$SHA -X github.com/xtls/xray-core/core.build=$SHA" ./main
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: xray-${{ matrix.arch }}
+          path: xray-out/xray
+          if-no-files-found: error
+          retention-days: 3
+
+  deploy:
+    name: Deploy configs and xray
+    needs:
+      - plan
+      - build-xray
+    if: ${{ !cancelled() && vars.ASTRARIUM_DEPLOY == 'enabled' && needs.plan.result == 'success' && needs.build-xray.result != 'failure' && (github.event_name == 'push' || inputs.action == 'deploy') }}
+    runs-on: ubuntu-24.04
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: false
+      - name: Install tool stack
+        env:
+          UV_INDEX_PHOTON_PASSWORD: ${{ secrets.PHOTON_READ_TOKEN }}
+        run: uv sync --frozen
+      - name: Install sops
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSLo "$RUNNER_TEMP/bin/sops" "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
+          echo "$SOPS_SHA256  $RUNNER_TEMP/bin/sops" | sha256sum -c -
+          chmod 0755 "$RUNNER_TEMP/bin/sops"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Download xray builds
+        if: needs.plan.outputs.matrix != '[]'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: xray-*
+          path: xray-artifacts
+      - name: Install deploy key
+        env:
+          SSH_KEY: ${{ secrets.ASTRARIUM_DEPLOY_SSH_KEY }}
+        run: |
+          umask 077
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+      - name: arium fleet deploy
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          LIMIT: ${{ inputs.limit }}
+          CANARY: ${{ inputs.canary }}
+          FORCE: ${{ inputs.force }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          args=(--yes --notify discord)
+          if [ -n "$LIMIT" ]; then args+=(--limit "$LIMIT"); fi
+          if [ -n "$CANARY" ]; then args+=(--canary "$CANARY"); fi
+          if [ "$FORCE" = true ]; then args+=(--force); fi
+          if [ "$DRY_RUN" = true ]; then args+=(--dry-run); fi
+          for dir in xray-artifacts/xray-*; do
+            [ -f "$dir/xray" ] || continue
+            chmod +x "$dir/xray"
+            args+=(--artifact "${dir#xray-artifacts/xray-}=$PWD/$dir/xray")
+          done
+          uv run arium fleet deploy "${args[@]}"
+      - name: Remove deploy key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519
+
+  versions-apply:
+    name: Apply NullForge pins
+    needs: deploy
+    if: ${{ !cancelled() && (needs.deploy.result == 'success' || (needs.deploy.result == 'skipped' && inputs.action == 'versions-apply')) && vars.ASTRARIUM_DEPLOY == 'enabled' && vars.ASTRARIUM_CI_CAST == 'enabled' && (github.event_name == 'push' || inputs.action == 'versions-apply') }}
+    runs-on: ubuntu-24.04
+    environment: production
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: false
+      - name: Install tool stack
+        env:
+          UV_INDEX_PHOTON_PASSWORD: ${{ secrets.PHOTON_READ_TOKEN }}
+        run: uv sync --frozen
+      - name: Determine changed-since base
+        id: base
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        env:
+          EVENT_BEFORE: ${{ github.event.before }}
+        with:
+          script: |
+            // anchor: newest completed run (push or dispatch) whose apply job ran its non-dry-run marker step
+            const { owner, repo } = context.repo;
+            const branch = context.ref.replace('refs/heads/', '');
+            const applyJob = 'Apply NullForge pins';
+            const markerStep = 'Record applied base';
+            const perPage = 100;
+            const maxRuns = 300;
+            let ref = '';
+            let scanned = 0;
+            for (let page = 1; !ref && scanned < maxRuns; page += 1) {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id: 'deploy.yaml',
+                branch,
+                status: 'completed',
+                per_page: perPage,
+                page,
+              });
+              for (const run of data.workflow_runs) {
+                if (scanned >= maxRuns) break;
+                scanned += 1;
+                const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
+                  owner,
+                  repo,
+                  run_id: run.id,
+                  per_page: 100,
+                });
+                const applied = jobsData.jobs.some(
+                  (job) =>
+                    job.name === applyJob &&
+                    (job.steps || []).some((step) => step.name === markerStep && step.conclusion === 'success'),
+                );
+                if (applied) {
+                  ref = run.head_sha;
+                  break;
+                }
+              }
+              if (data.workflow_runs.length < perPage) break;
+            }
+            if (!ref) {
+              ref = process.env.EVENT_BEFORE || '';
+              core.warning(
+                `none of last ${scanned} completed runs on ${branch} applied NullForge pins, ` +
+                  `changed-since base falls back to ${ref || 'nothing (apply refuses, dispatch with since)'}`,
+              );
+            }
+            core.setOutput('ref', ref);
+      - name: Install sops
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSLo "$RUNNER_TEMP/bin/sops" "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
+          echo "$SOPS_SHA256  $RUNNER_TEMP/bin/sops" | sha256sum -c -
+          chmod 0755 "$RUNNER_TEMP/bin/sops"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Start ssh-agent
+        run: |
+          umask 077
+          eval "$(ssh-agent -s)"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+      - name: Add cast SSH keys
+        env:
+          DEPLOY_KEY: ${{ secrets.ASTRARIUM_DEPLOY_SSH_KEY }}
+          CAST_KEY: ${{ secrets.ASTRARIUM_CAST_SSH_KEY }}
+        run: |
+          ssh-add - <<< "$DEPLOY_KEY"
+          ssh-add - <<< "$CAST_KEY"
+      - name: arium versions apply
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          SINCE_INPUT: ${{ inputs.since }}
+          AUTO_BASE: ${{ steps.base.outputs.ref }}
+          LIMIT: ${{ inputs.limit }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          changed_since="$(printf '%s' "$SINCE_INPUT" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          if [ -z "$changed_since" ]; then changed_since="$AUTO_BASE"; fi
+          args=(--changed-since "$changed_since" --as ci --yes)
+          if [ -n "$LIMIT" ]; then args+=(--limit "$LIMIT"); fi
+          if [ "$DRY_RUN" = true ]; then args+=(--dry-run); fi
+          uv run arium versions apply "${args[@]}"
+      - name: Record applied base
+        # full-fleet applies only, --limit dispatch never moves changed-since anchor past pins of other nodes
+        if: ${{ inputs.dry_run != true && (github.event_name == 'push' || inputs.limit == '') }}
+        run: echo "NullForge pins applied up to $GITHUB_SHA"
+      - name: Stop ssh-agent
+        if: always()
+        run: ssh-agent -k
+
+  provision:
+    name: Provision
+    if: vars.ASTRARIUM_DEPLOY == 'enabled' && vars.ASTRARIUM_CI_CAST == 'enabled' && github.event_name == 'workflow_dispatch' && inputs.action == 'provision'
+    runs-on: ubuntu-24.04
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: false
+      - name: Install tool stack
+        env:
+          UV_INDEX_PHOTON_PASSWORD: ${{ secrets.PHOTON_READ_TOKEN }}
+        run: uv sync --frozen
+      - name: Install sops
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSLo "$RUNNER_TEMP/bin/sops" "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
+          echo "$SOPS_SHA256  $RUNNER_TEMP/bin/sops" | sha256sum -c -
+          chmod 0755 "$RUNNER_TEMP/bin/sops"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Start ssh-agent
+        run: |
+          umask 077
+          eval "$(ssh-agent -s)"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+      - name: Add cast SSH keys
+        env:
+          DEPLOY_KEY: ${{ secrets.ASTRARIUM_DEPLOY_SSH_KEY }}
+          CAST_KEY: ${{ secrets.ASTRARIUM_CAST_SSH_KEY }}
+        run: |
+          ssh-add - <<< "$DEPLOY_KEY"
+          ssh-add - <<< "$CAST_KEY"
+      - name: arium fleet provision
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          LIMIT: ${{ inputs.limit }}
+          RUNES: ${{ inputs.runes }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          args=(--as ci --yes)
+          if [ -n "$LIMIT" ]; then args+=(--limit "$LIMIT"); fi
+          if [ "$DRY_RUN" = true ]; then args+=(--dry-run); fi
+          IFS=',' read -ra runes <<<"$RUNES"
+          for rune in "${runes[@]}"; do
+            rune=${rune//[[:space:]]/}
+            if [ -n "$rune" ]; then args+=(--rune "$rune"); fi
+          done
+          uv run arium fleet provision "${args[@]}"
+      - name: Stop ssh-agent
+        if: always()
+        run: ssh-agent -k

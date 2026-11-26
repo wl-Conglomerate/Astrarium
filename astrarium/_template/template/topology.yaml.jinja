@@ -1,0 +1,32 @@
+# HexRift topology. global.namespace stays a placeholder: real value lives in
+# secrets/astrarium.sops.yaml at topology.namespace. Pick your own REALITY dest before adding hubs.
+global:
+  namespace: namespace.placeholder.invalid
+  aphelion_domain: aphelion.{{ domain }}
+
+defaults:
+  exit:
+    ipv6: true
+    keys:
+      auth: mlkem768
+      mode: native
+      session_time: 600s
+  hub:
+    ipv6: true
+    keys:
+      auth: x25519
+      mode: native
+      session_time: 600s
+    exit_connections:
+      method: mlkem768x25519plus
+      fingerprint: chrome
+    reality:
+      dest: www.microsoft.com:443
+
+groups: []
+users: []
+
+routing:
+  hub_default: direct
+
+regions: []
