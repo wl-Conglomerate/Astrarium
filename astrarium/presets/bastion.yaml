@@ -1,0 +1,19 @@
+# Built-in preset for role "bastion" (SSH jump host): generic parts only. `port: ssh` resolves to
+# node ssh.port. Users stay unmanaged, so casts need explicit nodes.<id>.ssh.user.
+features:
+  netsec:
+    firewall: true
+    firewall_rules:
+      - {port: 80, comment: Lets Encrypt HTTP}
+      - {port: 443, comment: Lets Encrypt HTTPS}
+      - {port: ssh, comment: SSH}
+    ssh:
+      host_keys: [ed25519]
+      pq_kex_priority: true
+      strip_weak_algorithms: true
+  users:
+    users: []
+  dns:
+    mode: blocky
+    upstream_provider: quad9
+    ecs: true
