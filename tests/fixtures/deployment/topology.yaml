@@ -1,0 +1,55 @@
+# Fixture HexRift topology: one exit region, one hub region. Namespace is Astrarium placeholder,
+# real (fake) value comes from overlay at build time.
+global:
+  namespace: namespace.placeholder.invalid
+  aphelion_domain: aphelion.example.net
+
+defaults:
+  exit:
+    ipv6: false
+    keys:
+      auth: x25519
+      mode: native
+      session_time: 600s
+  hub:
+    ipv6: false
+    keys:
+      auth: x25519
+      mode: native
+      session_time: 600s
+    exit_connections:
+      method: mlkem768x25519plus
+      fingerprint: chrome
+    reality:
+      dest: www.example.com:443
+    xhttp:
+      path: /update/
+
+groups:
+  - id: main
+    short_id: "aabbccddeeff0011"
+
+users:
+  - username: alice
+    group: main
+    access: [xhttp]
+
+routing:
+  hub_default: nl
+
+regions:
+  - id: nl
+    type: exit
+    vless_route: 1000
+    nodes:
+      - id: nlA00
+        hostname: nlA00.aphelion.example.net
+        reality:
+          dest: www.example.com:443
+        xhttp:
+          path: /update/
+  - id: msk
+    type: hub
+    nodes:
+      - id: mskA00
+        hostname: mskA00.perigee.example.net

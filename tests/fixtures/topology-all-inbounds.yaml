@@ -1,0 +1,141 @@
+# HexRift topology with every inbound kind (REALITY and TLS xhttp, CDN, Hysteria, WireGuard, xdns,
+# proxy, portals, warp routes), modelled on HexRift's own test fixture. Masking contract test renders it.
+global:
+  namespace: namespace.placeholder.invalid
+  aphelion_domain: aphelion.example.net
+  cdn:
+    exit_domain: cdn-exit.example.net
+    hub_domain: cdn-hub.example.net
+
+defaults:
+  exit:
+    ipv6: true
+    keys:
+      auth: mlkem768
+      mode: native
+      session_time: 600s
+  hub:
+    ipv6: true
+    proxy_inbound: false
+    keys:
+      auth: x25519
+      mode: native
+      session_time: 600s
+    exit_connections:
+      method: mlkem768x25519plus
+      fingerprint: chrome
+    reality:
+      dest: www.example.com:443
+    xhttp:
+      path: /update/
+    xdns:
+      domains: ["dns.example.org"]
+    wireguard:
+      subnet: "198.51.100.0/24"
+    hysteria:
+      port: 8443
+    observability:
+      metrics:
+        enabled: true
+
+groups:
+  - id: main
+    short_id: "aabbccddeeff0011"
+  - id: guest
+
+users:
+  - username: alice
+    group: main
+    access: [xhttp, tls, cdn, server, proxy, wireguard, hysteria]
+  - username: bob
+    group: guest
+    access: [xhttp, wireguard, xdns]
+    guests: [laptop, phone]
+
+portals:
+  - id: home
+    users: [alice]
+    routes:
+      domains: [home.example.org]
+    publish:
+      - port: 8443
+        target: 192.0.2.10:443
+        allow: [203.0.113.7/32]
+      - port: 9000
+        target: nas.example.org:5000
+        network: tcp,udp
+  - id: office
+    users: [alice, bob]
+    routes:
+      ips: [192.0.2.128/25]
+
+routing:
+  hub_default: nl
+  hub_routes:
+    - destination: direct
+      domains: [internal.example.org]
+
+regions:
+  - id: nl
+    type: exit
+    vless_route: 1000
+    cdn_xhttp_path: /cdn/
+    hysteria:
+      key_type: ecdsa-p256
+    nodes:
+      - id: nlA00
+        hostname: nlA00.aphelion.example.net
+        reality:
+          dest: www.example.com:443
+        xhttp:
+          path: /update/
+  - id: de
+    type: exit
+    vless_route: 2000
+    protocol: hysteria
+    hysteria:
+      obfs: true
+      congestion: brutal
+      up: "200 mbps"
+      down: "500 mbps"
+    nodes:
+      - id: deA00
+        hostname: deA00.aphelion.example.net
+        reality:
+          dest: www.example.com:443
+        xhttp:
+          path: /update/
+  - id: jp
+    type: exit
+    vless_route: 3000
+    lb_strategy: leastLoad
+    warp:
+      vless_route: 3001
+    nodes:
+      - id: jpA00
+        hostname: jpA00.aphelion.example.net
+        reality:
+          dest: www.example.com:443
+        xhttp:
+          path: /update/
+  - id: msk
+    type: hub
+    cdn_xhttp_path: /cdn/
+    nodes:
+      - id: mskA00
+        hostname: mskA00.perigee.example.net
+        proxy_inbound: true
+  - id: spb
+    type: hub
+    tls:
+      certificate:
+        cert_file: /usr/local/etc/xray/certs/fullchain.pem
+        key_file: /usr/local/etc/xray/certs/privkey.pem
+    xhttp:
+      path: /tls/
+    nodes:
+      - id: spbA00
+        hostname: spbA00.perigee.example.net
+        haproxy: false
+        hysteria:
+          enabled: false

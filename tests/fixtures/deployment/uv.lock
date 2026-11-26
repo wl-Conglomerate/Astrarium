@@ -1,0 +1,23 @@
+version = 1
+revision = 3
+requires-python = ">=3.13"
+
+[[package]]
+name = "astrarium"
+version = "0.1.0"
+source = { registry = "https://photon.example.invalid/simple/" }
+
+[[package]]
+name = "hexrift"
+version = "0.13.1"
+source = { registry = "https://photon.example.invalid/simple/" }
+
+[[package]]
+name = "nullforge"
+version = "0.3.1"
+source = { registry = "https://photon.example.invalid/simple/" }
+
+[[package]]
+name = "pydantic"
+version = "2.13.5"
+source = { registry = "https://pypi.org/simple" }
