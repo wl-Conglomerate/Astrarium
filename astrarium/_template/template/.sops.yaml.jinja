@@ -1,0 +1,5 @@
+{%- set recipients = age_recipients.splitlines() | map('trim') | reject('equalto', '') | list -%}
+# sops recipients: operators, CI key, offline backup key. Manage with `arium secrets recipients add|remove`.
+creation_rules:
+  - path_regex: (^|/)secrets/.*\.ya?ml$
+    age: '{{ recipients | join(',') | replace("'", "''") }}'

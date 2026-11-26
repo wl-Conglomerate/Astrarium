@@ -1,0 +1,88 @@
+name: DNS deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - dns/**
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: Base git ref for change detection
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astrarium-dns
+  cancel-in-progress: false
+
+env:
+  UV_FROZEN: "1"
+  UV_INDEX_PHOTON_USERNAME: __token__
+
+jobs:
+  deploy:
+    name: Deploy DNS
+    if: vars.ASTRARIUM_DNS_DEPLOY == 'enabled'
+    runs-on: ubuntu-24.04
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: false
+      - name: Install tool stack
+        env:
+          UV_INDEX_PHOTON_PASSWORD: ${{ secrets.PHOTON_READ_TOKEN }}
+        run: uv sync --frozen
+      - name: Deploy DNS changes
+        working-directory: dns
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.base_ref || github.event.before }}
+        run: |
+          set -o pipefail
+          BASE_REF="$(printf '%s' "$BASE_REF" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            if [ -z "$BASE_REF" ]; then
+              echo "base_ref input is required for a manual dispatch" >&2
+              exit 1
+            fi
+            if ! git rev-parse --verify "${BASE_REF}^{commit}" >/dev/null 2>&1; then
+              echo "base_ref '$BASE_REF' does not resolve to a commit" >&2
+              exit 1
+            fi
+          else
+            # first push (all-zero sha) or force push (old tip gone) -> empty tree, all zones (safe superset)
+            git cat-file -e "${BASE_REF}^{commit}" 2>/dev/null || BASE_REF=4b825dc642cb6eb9a060e54bf8d69288fbee4904
+          fi
+          uv run manticora -q deploy --force --format discord --base-ref "$BASE_REF" 2>&1 | tee "$RUNNER_TEMP/dns-deploy.txt"
+      - name: Notify Discord
+        if: always()
+        continue-on-error: true
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_THREAD_ID: ${{ secrets.DISCORD_THREAD_ID }}
+          JOB_STATUS: ${{ job.status }}
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -n "$DISCORD_WEBHOOK_URL" ] || exit 0
+          if [ "$JOB_STATUS" = success ]; then title="DNS deploy succeeded"; color=3066993; else title="DNS deploy failed"; color=15158332; fi
+          output=$(tail -c 1800 "$RUNNER_TEMP/dns-deploy.txt" 2>/dev/null || echo "(no output captured)")
+          payload=$(jq -n --arg title "$title" --argjson color "$color" --arg output "$output" --arg commit "${COMMIT_SHA:0:12}" --arg run_url "$RUN_URL" \
+            '{username: "Manticora", embeds: [{title: $title, color: $color, description: $output, fields: [{name: "Commit", value: ("`" + $commit + "`"), inline: true}, {name: "Run", value: ("[View logs](" + $run_url + ")"), inline: true}]}]}')
+          url="$DISCORD_WEBHOOK_URL"
+          if [ -n "$DISCORD_THREAD_ID" ]; then url="$url?thread_id=$DISCORD_THREAD_ID"; fi
+          curl -fsS -o /dev/null -H "Content-Type: application/json" -d "$payload" "$url"

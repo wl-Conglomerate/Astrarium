@@ -1,0 +1,119 @@
+name: DNS validate
+
+on:
+  pull_request:
+    paths:
+      - dns/**
+
+permissions:
+  contents: read
+
+env:
+  UV_FROZEN: "1"
+  UV_INDEX_PHOTON_USERNAME: __token__
+
+jobs:
+  validate:
+    name: Validate and plan DNS
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      validate: ${{ steps.validate.outcome }}
+      plan: ${{ steps.plan.outcome }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+      - name: Install tool stack
+        env:
+          UV_INDEX_PHOTON_PASSWORD: ${{ secrets.PHOTON_READ_TOKEN }}
+        run: uv sync --frozen
+      - name: Validate
+        id: validate
+        continue-on-error: true
+        working-directory: dns
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DNS_READ_TOKEN }}
+        run: uv run manticora validate
+      - name: Plan
+        id: plan
+        if: steps.validate.outcome == 'success'
+        continue-on-error: true
+        working-directory: dns
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DNS_READ_TOKEN }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -o pipefail
+          uv run manticora -q plan --format discord --base-ref "origin/$BASE_REF" 2>&1 | tee "$GITHUB_WORKSPACE/dns-plan.md"
+      - name: Keep plan for comment job
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dns-plan
+          path: dns-plan.md
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Fail on validation or plan errors
+        if: steps.validate.outcome == 'failure' || steps.plan.outcome == 'failure'
+        run: exit 1
+
+  comment:
+    name: Post DNS plan
+    needs: validate
+    if: ${{ !cancelled() && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          name: dns-plan
+          path: dns-plan
+      - uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        env:
+          VALIDATE_OUTCOME: ${{ needs.validate.outputs.validate }}
+          PLAN_OUTCOME: ${{ needs.validate.outputs.plan }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- manticora-plan-comment -->';
+            const path = 'dns-plan/dns-plan.md';
+            const plan = fs.existsSync(path) ? fs.readFileSync(path, 'utf8') : '';
+            const status = process.env.VALIDATE_OUTCOME !== 'success'
+              ? 'Configuration validation failed: fix it before merging.'
+              : process.env.PLAN_OUTCOME !== 'success'
+                ? 'Plan generation failed.'
+                : 'Configuration validation passed.';
+            let body = [
+              marker,
+              '## DNS deployment plan',
+              '',
+              `Commit: \`${process.env.COMMIT_SHA}\``,
+              '',
+              `**${status}**`,
+              '',
+              '<details><summary>Plan</summary>',
+              '',
+              plan || '_No plan output._',
+              '',
+              '</details>',
+            ].join('\n');
+            if (body.length > 65000) body = body.slice(0, 65000) + '\n\n(truncated)\n';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number, per_page: 100 });
+            const existing = comments.find((comment) => comment.body && comment.body.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
