@@ -1,0 +1,22 @@
+# Built-in preset for role "pulsar" (telemt): generic parts only. Deployments add telemt users (overlay)
+# and tls_domain under roles.pulsar.
+features:
+  netsec:
+    firewall: true
+    firewall_rules:
+      - {port: 443, comment: Telemt TLS}
+    ssh:
+      host_keys: [ed25519]
+      pq_kex_priority: true
+      strip_weak_algorithms: true
+  dns:
+    mode: blocky
+    upstream_provider: quad9
+    ecs: true
+  warp:
+    install: true
+  telemt:
+    install: true
+    port: 443
+    route_via_warp: true
+    synfix: true
