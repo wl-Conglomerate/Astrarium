@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.astrarium/
+
+# local working artifacts, never committed
+/CLAUDE.md
+/docs/decisions/
+/docs/plans/
+/docs/research/
+/docs/specs/
