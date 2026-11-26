@@ -1,0 +1,20 @@
+# Built-in preset for role "exit": generic parts only, deployments add deltas under roles.exit.
+features:
+  netsec:
+    firewall: true
+    firewall_rules:
+      - {port: 443, proto: tcp, comment: XHTTP}
+    ssh:
+      host_keys: [ed25519]
+      pq_kex_priority: true
+      strip_weak_algorithms: true
+  dns:
+    mode: blocky
+    upstream_provider: quad9
+    ecs: true
+  warp:
+    install: true
+  haproxy:
+    install: true
+  xray:
+    install: true
