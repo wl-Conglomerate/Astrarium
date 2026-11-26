@@ -1,0 +1,26 @@
+[project]
+name = "deployment-{{ deployment_name }}"
+version = "0"
+requires-python = ">=3.13"
+dependencies = [
+  "astrarium=={{ astrarium_version }}",
+  "hexrift=={{ hexrift_version }}",
+  "nullforge=={{ nullforge_version }}",
+{%- if has_dns %}
+  "manticora=={{ manticora_version }}",
+{%- endif %}
+]
+
+[tool.uv]
+package = false
+
+[[tool.uv.index]]
+name = "photon"
+url = "{{ photon_url }}"
+explicit = true
+
+[tool.uv.sources]
+astrarium = { index = "photon" }
+hexrift = { index = "photon" }
+nullforge = { index = "photon" }
+manticora = { index = "photon" }
