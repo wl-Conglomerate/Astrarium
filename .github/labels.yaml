@@ -1,0 +1,129 @@
+# Core Labels
+- name: "bug"
+  description: "Something is not working"
+  color: "d73a4a"
+
+- name: "feature"
+  description: "New feature or request"
+  color: "a2eeef"
+
+- name: "enhancement"
+  description: "Improvement to existing functionality"
+  color: "0e8a16"
+
+- name: "docs"
+  description: "Documentation updates"
+  color: "0075ca"
+
+- name: "breaking-change"
+  description: "Breaking changes"
+  color: "b60205"
+
+- name: "core"
+  description: "Core framework and architecture"
+  color: "006b75"
+
+- name: "manifest"
+  description: "Fleet manifest models, layering and presets"
+  color: "1d76db"
+
+- name: "topology"
+  description: "HexRift bridge and shared build pipeline"
+  color: "fbca04"
+
+- name: "secrets"
+  description: "Sops keystore, masking and recipients"
+  color: "d4c5f9"
+
+- name: "keys"
+  description: "Age and sops key management"
+  color: "bfd4f2"
+
+- name: "rollout"
+  description: "Deploy command, probes and canary rollout"
+  color: "5319e7"
+
+- name: "versions"
+  description: "Upstream versions, probes, bumps and pins"
+  color: "7676ed"
+
+- name: "status"
+  description: "Node reachability and version status"
+  color: "bfdadc"
+
+- name: "doctor"
+  description: "Manifest and topology consistency checks"
+  color: "dbc5f5"
+
+- name: "check"
+  description: "Pre-deploy config verification with throwaway keys"
+  color: "fef2c0"
+
+- name: "init"
+  description: "Deployment repo init from the bundled template"
+  color: "bef5f0"
+
+- name: "notify"
+  description: "Discord run summaries"
+  color: "ff9800"
+
+- name: "inventory"
+  description: "Nullforge casts, access runes and provision command"
+  color: "0fa3b1"
+
+- name: "sshcfg"
+  description: "Per-identity ssh config and known hosts rendering"
+  color: "b6e3d4"
+
+- name: "payloads"
+  description: "Node apply payloads"
+  color: "5eead4"
+
+- name: "runes"
+  description: "Pyinfra deploy runes"
+  color: "e0e0e0"
+
+- name: "templates"
+  description: "Bundled copier template updates"
+  color: "c2e0c6"
+
+- name: "security"
+  description: "Security-related changes"
+  color: "ee0701"
+
+- name: "refactor"
+  description: "Code refactoring"
+  color: "cccccc"
+
+- name: "cli"
+  description: "CLI & Commands"
+  color: "f9d0c4"
+
+- name: "tests"
+  description: "Testing"
+  color: "e99695"
+
+- name: "ci-cd"
+  description: "CI/CD and automation"
+  color: "0052cc"
+
+- name: "dependencies"
+  description: "Changes to dependencies"
+  color: "a569bd"
+
+- name: "automated"
+  description: "Automated changes (bots, scheduled workflows)"
+  color: "ededed"
+
+# PR Labels
+- name: "duplicate"
+  description: "This issue or PR already exists"
+  color: "cfd3d7"
+
+- name: "invalid"
+  description: "This doesn't seem right"
+  color: "e4e669"
+
+- name: "wontfix"
+  description: "This will not be worked on"
+  color: "ffffff"
