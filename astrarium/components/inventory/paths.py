@@ -21,7 +21,7 @@ from astrarium.runtime import RuntimeDir
 
 LOG = logging.getLogger(__name__)
 
-CastIdentity = Literal["admin", "ci"]
+CastIdentity = Literal["admin", "ci", "root"]
 
 PATH_PROBE = "echo astrarium-path-ok"
 
@@ -31,8 +31,8 @@ LOCK_CHECK_TIMEOUT = 30.0
 
 LOCK_BUSY_RC = 75
 
-NO_BASTION_LOGIN: frozenset[str] = frozenset({"deploy", "ci"})
-"""Identities without shell on bastions: jump-only deploy account, no CI cast user there."""
+NO_BASTION_LOGIN: frozenset[str] = frozenset({"deploy", "ci", "root"})
+"""Identities without shell on bastions: jump-only deploy account, no CI cast user, root never used there."""
 
 
 def check_cast_identity(identity: CastIdentity, via: Via, control: ControlSection) -> None:
@@ -49,12 +49,15 @@ def check_cast_identity(identity: CastIdentity, via: Via, control: ControlSectio
 
 
 def paths_in_use(identity: CastIdentity, via: Via, control: ControlSection) -> list[tuple[Identity, Via]]:
-    """Identities and routes checked after SSH-sensitive batches: deploy and cast identity, cast route and jump."""
+    """Identities and routes checked after SSH-sensitive batches: deploy and cast identity, cast route and jump.
+
+    Root is intentionally killed by the cast's users/netsec runes, so a root cast re-probes deploy only.
+    """
 
     routes: list[Via] = [via]
     if control.jump is not None and via != "jump":
         routes.append("jump")
-    identities: list[Identity] = ["deploy", identity]
+    identities: list[Identity] = ["deploy"] if identity == "root" else ["deploy", identity]
     return [(who, route) for who in identities for route in routes]
 
 

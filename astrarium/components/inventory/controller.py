@@ -125,12 +125,14 @@ class ProvisionPlan:
 
 
 def bastion_skip(node: EffectiveNode, named: set[str], identity: CastIdentity) -> str | None:
-    """Reason to leave bastion out: no CI cast user there, and broad selections never reach it."""
+    """Reason to leave bastion out: no CI cast user or root login there, and broad selections never reach it."""
 
     if node.root_role != "bastion":
         return None
     if identity == "ci":
         return "no CI cast user on a bastion"
+    if identity == "root":
+        return "bastions are never root-cast, hop there as admin"
     if node.id not in named:
         return "bastion: name it in --limit to cast it"
     return None
