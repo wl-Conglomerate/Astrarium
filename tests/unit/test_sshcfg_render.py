@@ -71,6 +71,14 @@ def test_identities_pick_login_users() -> None:
         )
         == "root"
     )
+    assert (
+        login_user(
+            node,
+            "root",
+            CONTROL,
+        )
+        == "root"
+    )
 
 
 def test_hop_uses_deploy_user_except_for_admin() -> None:
@@ -101,6 +109,14 @@ def test_hop_uses_deploy_user_except_for_admin() -> None:
         hop_user(
             jump,
             "admin",
+            CONTROL,
+        )
+        == "keeper"
+    )
+    assert (
+        hop_user(
+            jump,
+            "root",
             CONTROL,
         )
         == "keeper"
