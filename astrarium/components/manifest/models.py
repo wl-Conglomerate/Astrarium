@@ -24,7 +24,8 @@ ARCH_BY_MACHINE: Mapping[str, Arch] = {
 }
 """platform.machine()/uname -m -> manifest Arch, shared by check and integration harness."""
 
-Identity = Literal["deploy", "admin", "ci"]
+Identity = Literal["deploy", "admin", "ci", "root"]
+"""root is first-deploy only: the cast's users/netsec hardening disables it afterwards."""
 
 NODE_ID_PATTERN = r"^[A-Za-z][A-Za-z0-9-]*$"
 """Node ids: no dots, slashes or fnmatch metacharacters (inventory host names, ssh_config aliases)."""

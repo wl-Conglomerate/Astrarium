@@ -167,10 +167,10 @@ class InventoryComponent(BaseComponent["AstrariumApp", InventoryController]):
         @click.option(
             "--as",
             "identity",
-            type=click.Choice(["admin", "ci"]),
+            type=click.Choice(["admin", "ci", "root"]),
             default="admin",
             show_default=True,
-            help="Login identity: managed admin user (laptop) or CI cast user.",
+            help="Login identity: managed admin user (laptop), CI cast user, or root for first deploy only.",
         )
         @click.option(
             "--via",

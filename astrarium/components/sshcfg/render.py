@@ -43,7 +43,7 @@ def hop_user(jump: EffectiveNode, identity: Identity, control: ControlSection) -
             "admin",
             control,
         )
-        if identity == "admin"
+        if identity in ("admin", "root")
         else control.deploy_user
     )
 
@@ -90,6 +90,8 @@ def ssh_scope(
 def login_user(node: EffectiveNode, identity: Identity, control: ControlSection) -> str:
     """Login of identity on node as target."""
 
+    if identity == "root":
+        return "root"
     if identity == "deploy":
         return control.deploy_user
     if identity == "ci":

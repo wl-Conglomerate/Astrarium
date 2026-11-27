@@ -28,7 +28,7 @@ def nullforge_versions(versions: Mapping[str, VersionPin]) -> dict[str, str]:
 
 
 def _without_root_key_copy(features: dict[str, Any]) -> dict[str, Any]:
-    """CI casts turn off copy_root_keys on every user: NullForge copies login user's authorized_keys there."""
+    """CI and root casts turn off copy_root_keys on every user: NullForge copies login user's authorized_keys there."""
 
     users = features.get("users", {})
     entries = [{**entry, "copy_root_keys": False} for entry in users.get("users", [])]
@@ -77,7 +77,7 @@ def host_data(
     if node.root_role != "bastion":
         features = _with_deploy_user(features, control)
         features = _with_user_profiles(features)
-    if ssh.identity == "ci":
+    if ssh.identity in ("ci", "root"):
         features = _without_root_key_copy(features)
     return {
         "zone": node.root_role,
