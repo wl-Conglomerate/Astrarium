@@ -55,14 +55,14 @@ def _with_deploy_user(features: dict[str, Any], control: ControlSection) -> dict
 
 
 def _with_user_profiles(features: dict[str, Any]) -> dict[str, Any]:
-    """Fill empty profiles.users with every managed user name (NullForge profiles rune takes explicit names)."""
+    """Fill empty profiles.users with admin user names only: deploy stays plain bash, root keeps its own."""
 
     profiles = features.get("profiles", {})
     entries = features.get("users", {}).get("users", [])
     if profiles.get("users") or not entries:
         return features
-    names = sorted({entry["name"] for entry in entries})
-    return {**features, "profiles": {**profiles, "users": names}}
+    names = sorted({entry["name"] for entry in entries if entry.get("role") == "admin"})
+    return {**features, "profiles": {**profiles, "for_root": True, "users": names}}
 
 
 def host_data(
