@@ -1,0 +1,30 @@
+# Astrarium deployment manifest. Schema: `arium config schema`.
+deployment:
+  name: {{ deployment_name }}
+  domain: {{ domain }}
+  names: {exit: aphelion, hub: perigee, pulsar: pulsar}
+
+control:
+  deploy_user: github_actions
+  deploy_keys: []
+{%- if jump %}
+  jump: {{ jump }}
+{%- endif %}
+  ssh_allow: []
+  # CI casts, enabled after cutover together with ASTRARIUM_CI_CAST:
+  # ci: {cast_user: astrarium_ci, cast_keys: []}
+
+notify:
+  discord: {}
+
+keys:
+  exit_rotation: manual
+
+system: {}
+features: {}
+roles: {}
+
+# `arium versions bump xray <tag>` writes pin and per-arch sha256
+versions: {}
+
+nodes: {}

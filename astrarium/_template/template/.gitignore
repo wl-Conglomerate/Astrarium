@@ -1,0 +1,4 @@
+.astrarium/
+.venv/
+__pycache__/
+.env

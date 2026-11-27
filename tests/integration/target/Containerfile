@@ -1,0 +1,27 @@
+# Disposable integration target (spec 16): Debian 12, systemd as PID 1, sshd, sudo.
+# Mock environment only, never production evidence. Started by it-target.sh.
+FROM docker.io/library/debian:12
+
+ENV container=docker
+ENV DEBIAN_FRONTEND=noninteractive
+
+# acl and curl stand in for NullForge base packages, apt lists stay so runes can install more
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        acl ca-certificates curl dbus iproute2 openssh-server procps sudo systemd systemd-sysv unzip \
+    && rm -f /etc/ssh/ssh_host_* \
+    && systemctl mask systemd-udevd.service systemd-udevd-control.socket systemd-udevd-kernel.socket \
+        systemd-remount-fs.service getty.target \
+    && useradd --create-home --shell /bin/bash astrarium \
+    && usermod -p '*' astrarium \
+    && printf 'astrarium ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/astrarium \
+    && chmod 0440 /etc/sudoers.d/astrarium \
+    && mkdir -p /etc/systemd/system/ssh.service.d \
+    && printf '[Service]\nExecStartPre=\nExecStartPre=/usr/bin/ssh-keygen -A\nExecStartPre=/usr/sbin/sshd -t\n' \
+        > /etc/systemd/system/ssh.service.d/host-keys.conf \
+    && bash -o pipefail -c 'head -c 16 /dev/urandom | od -An -tx1 | tr -d " \n" > /etc/astrarium-it-target' \
+    && test -s /etc/astrarium-it-target
+
+STOPSIGNAL SIGRTMIN+3
+EXPOSE 22
+CMD ["/lib/systemd/systemd"]

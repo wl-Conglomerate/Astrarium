@@ -1,0 +1,44 @@
+# Fixture deployment: documentation addresses, example.net names, fake host keys. No secrets here:
+# telemt users and namespace come from overlay encrypted by tests/support/deployment.py.
+deployment:
+  name: fixture
+  domain: example.net
+  names: {exit: aphelion, hub: perigee, pulsar: pulsar}
+
+control:
+  deploy_user: github_actions
+  deploy_keys:
+    - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUF operator
+  jump: edge
+  ssh_allow:
+    - {source: 192.0.2.7, comment: Home SSH}
+
+roles:
+  pulsar:
+    features:
+      telemt: {tls_domain: www.example.org}
+
+versions:
+  telemt: 3.5.7
+
+nodes:
+  nlA00:
+    role: exit
+    ipv4: 203.0.113.10
+    ipv6: 2001:db8::10
+    host_keys: {ed25519: AAAAC3NzaC1lZDI1NTE5AAAAIAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB}
+  mskA00:
+    role: hub
+    ipv4: 203.0.113.20
+    host_keys: {ed25519: AAAAC3NzaC1lZDI1NTE5AAAAIAICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC}
+  mskP00:
+    role: pulsar
+    ipv4: 203.0.113.30
+    host_keys: {ed25519: AAAAC3NzaC1lZDI1NTE5AAAAIAMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD}
+  edge:
+    role: bastion
+    ipv4: 198.51.100.20
+    ipv6: 2001:db8::20
+    hostname: edge.example.net
+    ssh: {port: 22443, user: operator}
+    host_keys: {ed25519: AAAAC3NzaC1lZDI1NTE5AAAAIAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE}
