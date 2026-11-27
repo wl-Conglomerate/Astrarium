@@ -68,6 +68,23 @@ def test_paths_in_use_cover_deploy_and_cast_identity_on_every_used_route():
         ("deploy", "direct"),
         ("admin", "direct"),
     }
+    assert set(
+        paths_in_use(
+            "root",
+            "direct",
+            make_control(),
+        )
+    ) == {
+        ("deploy", "direct"),
+        ("deploy", "jump"),
+    }
+    assert set(
+        paths_in_use(
+            "root",
+            "jump",
+            make_control(),
+        )
+    ) == {("deploy", "jump")}
 
 
 def test_deploy_lock_holders_are_left_not_attempted_and_silent_nodes_fail():

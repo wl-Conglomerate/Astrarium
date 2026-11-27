@@ -170,6 +170,19 @@ def test_ci_identity_never_casts_bastions(tmp_path):
     assert "edge" in plan.skipped
 
 
+def test_root_identity_never_casts_bastions(tmp_path):
+    plan = plan_provision(
+        fleet(),
+        make_control(),
+        Repo(root=tmp_path),
+        limit="edge,nlA00",
+        runes=[],
+        identity="root",
+    )
+    assert plan.targets == ["nlA00"]
+    assert "edge" in plan.skipped
+
+
 def test_provision_refuses_dirty_tree(tmp_path, monkeypatch):
     (tmp_path / "astrarium.yaml").write_text("deployment: {name: test}\nnodes: {}\n", encoding="utf-8")
     monkeypatch.setattr(
