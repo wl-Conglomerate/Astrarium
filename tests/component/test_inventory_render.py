@@ -93,6 +93,28 @@ def test_host_data_carries_ssh_files_login_and_nullforge_pins_only(tmp_path):
     assert data["astrarium"]["deploy_user"] == "github_actions"
 
 
+def test_profiles_cover_admin_and_root_but_not_deploy(tmp_path):
+    nodes = fleet()
+    ssh = _ssh(tmp_path, nodes)
+    data = dict(
+        _load(
+            tmp_path,
+            render_inventory(
+                nodes,
+                nodes,
+                ssh,
+                make_control(),
+            ),
+        )["exit"]
+    )["nlA00"]
+    profiles = data["features"]["profiles"]
+    assert profiles["for_root"] is True
+    assert profiles["users"] == ["core"]
+    users = {entry["name"]: entry for entry in data["features"]["users"]["users"]}
+    assert users["github_actions"]["shell"] == "/bin/bash"
+    assert users["core"]["shell"] == "/bin/zsh"
+
+
 def test_inventory_refuses_missing_ssh_config(tmp_path):
     nodes = fleet()
     ssh = _ssh(tmp_path, nodes)
